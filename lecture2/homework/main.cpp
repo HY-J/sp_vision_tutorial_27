@@ -3,6 +3,7 @@
 #include "opencv2/opencv.hpp"
 #include "tools/img_tools.hpp"
 
+//运行的时候必须在homework文件夹下输入../../build/main
 int main()
 {
     //  初始化相机、YOLO检测器 

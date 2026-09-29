@@ -42,7 +42,7 @@ Camera::Camera()
     MV_CC_SetEnumValue(handle_, "ExposureAuto", MV_EXPOSURE_AUTO_MODE_OFF);          // 关闭自动曝光
     MV_CC_SetEnumValue(handle_, "GainAuto", MV_GAIN_MODE_OFF);                       // 关闭自动增益
     MV_CC_SetFloatValue(handle_, "ExposureTime", 10000);                             // 固定曝光时间10000
-    MV_CC_SetFloatValue(handle_, "Gain", 20);                                        // 固定增益20
+    MV_CC_SetFloatValue(handle_, "Gain", 1);                                        // 固定增益20
     MV_CC_SetFrameRate(handle_, 60);                                                 // 帧率60
 
     // 5. 启动图像流
