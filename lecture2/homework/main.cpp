@@ -5,39 +5,46 @@
 
 int main()
 {
-    // ========== 初始化相机、YOLO检测器 ==========
+    //  初始化相机、YOLO检测器 
     Camera cam;
-    // YOLO类在auto_aim命名空间下；构造函数第二个debug参数有默认值，只传配置路径即可
+   
     auto_aim::YOLO yolo("./configs/yolo.yaml");
 
     cv::Mat img;
 
     while (true) {
-        // ========== 1. 读取相机图像 ==========
+        // 1. 读取相机图像 
         if (!cam.read(img))
             continue;
 
-        // ========== 2. YOLO识别装甲板 ==========
-        // detect返回std::list<Armor>，是所有识别到的装甲板的列表
-        // 第二个参数frame_count有默认值-1，可以不传
+        // 2. YOLO识别装甲板 
         auto armors = yolo.detect(img);
 
-        // ========== 3. 遍历每个装甲板，画绿色闭合矩形 ==========
+        // 3. 遍历每个装甲板，画绿色闭合矩形 
         // 每个Armor对象里包含四个关键点
-        for (const auto& armor : armors) {
-            // tools::draw_points 参数顺序：图像、点集、颜色、线宽（可选）
-            // OpenCV BGR顺序：绿色 = (0, 255, 0)
+        for (const auto& armor : armors){
             tools::draw_points(img, armor.points, cv::Scalar(0, 255, 0));
+
+            cv::Point text_pos = armor.points[0];
+            text_pos.y -= 12;//使标签位于方框上方，防止重叠
+            if(text_pos.y < 10) text_pos.y = 10;//防止超出画面
+
+            std::string info = "Num:" + std::to_string(armor.name)
+                        + " Color:" + std::to_string(armor.color);
+
+        // 使用工具函数draw_text
+        tools::draw_text(img, info, text_pos, cv::Scalar(0,255,0), 0.6, 1);
         }
 
-        // ========== 4. 缩放显示 ==========
-        cv::resize(img, img, cv::Size(640, 480));
+    
+        //  4. 缩放显示 
+        cv::resize(img, img, cv::Size(1280, 960));//原来太小，长宽各放大两倍
 
-        // ========== 5. 显示图像，按q退出 ==========
+        //  5. 显示图像，按q退出 
         cv::imshow("img", img);
-        if (cv::waitKey(0) == 'q') {
+        if (cv::waitKey(1) == 'q') {
             break;
-        }
+        }//原本的0会导致静止
     }
 
     return 0;
