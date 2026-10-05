@@ -18,8 +18,8 @@ public:
       : Node("sensor_subscriber")
   {
     this->declare_parameter("reliability", "reliable");
-    this->declare_parameter("depth", 10);
-    this->declare_parameter("callback_delay_ms", 30);
+    this->declare_parameter("depth", 500);
+    this->declare_parameter("callback_delay_ms", 10);
 
     reliability_ = this->get_parameter("reliability").as_string();
     depth_ = this->get_parameter("depth").as_int();
@@ -130,8 +130,20 @@ private:
 
     /*
     在这之间加入计算帧率并打印的代码
-
     */
+    auto now = std::chrono::steady_clock::now();
+    double delta_sec = std::chrono::duration<double>(now - last_report_time_).count();
+    uint32_t msg_in_period = received_count_ - last_received_count_;
+    double fps = static_cast<double>(msg_in_period) / delta_sec;
+
+    RCLCPP_INFO(
+        this->get_logger(),
+        "接收帧率：%.2f Hz",
+        fps);
+
+    last_received_count_ = received_count_;
+    last_report_time_ = now;
+    
   }
 
   rclcpp::Subscription<nav_hw_interfaces::msg::SensorData>::SharedPtr subscription_;
