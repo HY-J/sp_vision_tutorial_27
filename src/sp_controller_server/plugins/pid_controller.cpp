@@ -1,13 +1,12 @@
 #include "pid_controller.hpp"
-
 #include <pluginlib/class_list_macros.hpp>
-
 #include <rclcpp/exceptions.hpp>
 #include <sstream>
 #include <stdexcept>
+#include <cmath>
+#include <tf2/utils.h>
 
 namespace {
-
 [[noreturn]] void sp_nav_param_error(const rclcpp::Node & node, const std::string & name)
 {
   std::ostringstream oss;
@@ -28,10 +27,35 @@ T require_param(const rclcpp::Node::SharedPtr & node, const std::string & name)
     sp_nav_param_error(*node, name);
   }
 }
-
 }
 
 namespace pid_controller {
+
+// 工具函数：把角度归一化到 [-π, π]，避免角度跳变
+double PidController::normalizeAngle(double angle)
+{
+  while (angle > M_PI) angle -= 2 * M_PI;
+  while (angle < -M_PI) angle += 2 * M_PI;
+  return angle;
+}
+
+// 遍历路径，找到离当前机器人位置最近的路径点
+size_t PidController::findNearestIndex(const geometry_msgs::msg::PoseStamped & pose)
+{
+  double min_dist = 1e9;
+  size_t nearest_idx = 0;
+  for (size_t i = 0; i < global_plan_.poses.size(); ++i) {
+    const auto & p = global_plan_.poses[i].pose.position;
+    double dx = p.x - pose.pose.position.x;
+    double dy = p.y - pose.pose.position.y;
+    double dist = std::hypot(dx, dy);
+    if (dist < min_dist) {
+      min_dist = dist;
+      nearest_idx = i;
+    }
+  }
+  return nearest_idx;
+}
 
 void PidController::configure(
   const rclcpp::Node::SharedPtr & node, const std::string & name,
@@ -40,30 +64,112 @@ void PidController::configure(
   node_ = node;
   plugin_name_ = name;
   tf_buffer_ = tf_buffer;
+
   if (!node_) {
     throw std::runtime_error("PidController received null node");
   }
+
   base_frame_id_ = require_param<std::string>(node_, plugin_name_ + ".base_frame_id");
-  // TODO: 在此读取参数
+
+  // ========== 读取所有PID与运动参数 ==========
+  kp_ = require_param<double>(node_, plugin_name_ + ".kp");
+  ki_ = require_param<double>(node_, plugin_name_ + ".ki");
+  kd_ = require_param<double>(node_, plugin_name_ + ".kd");
+  max_linear_vel_ = require_param<double>(node_, plugin_name_ + ".max_linear_vel");
+  min_linear_vel_ = require_param<double>(node_, plugin_name_ + ".min_linear_vel");
+  lookahead_dist_ = require_param<double>(node_, plugin_name_ + ".lookahead_dist");
+  goal_tolerance_ = require_param<double>(node_, plugin_name_ + ".goal_tolerance");
+  max_integral_ = require_param<double>(node_, plugin_name_ + ".max_integral");
+
+  // 初始化PID状态
+  integral_ = 0.0;
+  prev_error_ = 0.0;
 }
 
 void PidController::setPlan(const nav_msgs::msg::Path & path)
 {
   global_plan_ = path;
+  // 新路径到来时重置PID状态，避免历史误差干扰
+  integral_ = 0.0;
+  prev_error_ = 0.0;
 }
 
 geometry_msgs::msg::TwistStamped PidController::computeVelocityCommands(
-  const geometry_msgs::msg::PoseStamped &,
-  const geometry_msgs::msg::Twist &)
+  const geometry_msgs::msg::PoseStamped & pose,
+  const geometry_msgs::msg::Twist & velocity)
 {
-  // TODO：在此实现路径跟踪
   geometry_msgs::msg::TwistStamped cmd_vel;
   cmd_vel.header.stamp = node_->now();
   cmd_vel.header.frame_id = base_frame_id_;
-  RCLCPP_WARN_THROTTLE(
-    node_->get_logger(), *node_->get_clock(), 5000,
-    "[%s] Controller plugin not implemented — implement computeVelocityCommands()",
-    plugin_name_.c_str());
+
+  // 路径为空，直接返回零速
+  if (global_plan_.poses.empty()) {
+    return cmd_vel;
+  }
+
+  // ========== 第一步：选取预瞄目标点 ==========
+  size_t nearest_idx = findNearestIndex(pose);
+  size_t target_idx = nearest_idx;
+  double acc_dist = 0.0;
+
+  // 沿着路径往前累加距离，直到达到预瞄距离
+  for (size_t i = nearest_idx; i < global_plan_.poses.size() - 1; ++i) {
+    const auto & p1 = global_plan_.poses[i].pose.position;
+    const auto & p2 = global_plan_.poses[i+1].pose.position;
+    double seg_len = std::hypot(p2.x - p1.x, p2.y - p1.y);
+    if (acc_dist + seg_len >= lookahead_dist_) {
+      target_idx = i + 1;
+      break;
+    }
+    acc_dist += seg_len;
+    target_idx = i + 1;
+  }
+  const auto & target_point = global_plan_.poses[target_idx].pose.position;
+
+  // ========== 第二步：计算航向误差 ==========
+  // 目标航向：从当前位置指向预瞄点的角度
+  double target_yaw = std::atan2(
+    target_point.y - pose.pose.position.y,
+    target_point.x - pose.pose.position.x
+  );
+  // 当前航向：从四元数提取yaw角
+  double current_yaw = tf2::getYaw(pose.pose.orientation);
+  // 航向误差 = 目标航向 - 当前航向，归一化
+  double heading_error = normalizeAngle(target_yaw - current_yaw);
+
+  // ========== 第三步：PID计算角速度 ==========
+  integral_ += heading_error;
+  // 积分限幅，防止饱和
+  if (integral_ > max_integral_) integral_ = max_integral_;
+  if (integral_ < -max_integral_) integral_ = -max_integral_;
+
+  double derivative = heading_error - prev_error_;
+  double angular_z = kp_ * heading_error + ki_ * integral_ + kd_ * derivative;
+  prev_error_ = heading_error;
+
+  // ========== 第四步：自适应线速度（弯道减速） ==========
+  double error_abs = std::fabs(heading_error);
+  // 误差越大（转弯越急），速度越低
+  double speed_scale = 1.0 - std::min(error_abs / M_PI_2, 1.0);
+  double linear_x = max_linear_vel_ * speed_scale;
+  // 保证不低于最小速度
+  linear_x = std::max(linear_x, min_linear_vel_);
+
+  // ========== 第五步：终点判定停车 ==========
+  const auto & goal_point = global_plan_.poses.back().pose.position;
+  double dist_to_goal = std::hypot(
+    goal_point.x - pose.pose.position.x,
+    goal_point.y - pose.pose.position.y
+  );
+  if (dist_to_goal < goal_tolerance_) {
+    linear_x = 0.0;
+    angular_z = 0.0;
+  }
+
+  // ========== 赋值输出 ==========
+  cmd_vel.twist.linear.x = linear_x;
+  cmd_vel.twist.angular.z = angular_z;
+
   return cmd_vel;
 }
 
