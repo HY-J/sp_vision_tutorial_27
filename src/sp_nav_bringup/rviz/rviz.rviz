@@ -289,6 +289,25 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /controller_server/minco_mpc_reference_traj
       Value: true
+    - Class: rviz_default_plugins/Trajectory
+      Buffer Length: 150
+      Color:
+        Alpha: 1.0
+        Color: 255; 200; 0
+      Enabled: true
+      Name: ActualTrajectory
+      Queue Size: 10
+      Show Head: false
+      Show Tail: false
+      Trajectory Style: Lines
+      Trajectory Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /Odometry
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

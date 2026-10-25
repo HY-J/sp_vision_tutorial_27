@@ -38,10 +38,12 @@ controller_server:
       kp: 2.0
       ki: 0.02
       kd: 0.5
-      max_linear_vel: 0.8
-      min_linear_vel: 0.08
+      max_linear_vel: 0.9
+      min_linear_vel: 0.15
       lookahead_dist: 1.2
       goal_tolerance: 0.10
+      corner_angle_deg: 45.0
+      corner_margin: 0.25
       max_integral: 0.3
 
 sp_decision:
