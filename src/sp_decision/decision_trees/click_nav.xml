@@ -16,7 +16,7 @@
             <ChassisMode mode="1"
                          is_stop="false"
                          rotate_velocity="0.0"/>
-            <GimbalControl mode="2"/>
+            <GimbalControl mode="3" big_yaw="0.0"/>
             <!-- 目标点来自 BlackboardBridge 写入的 clicked_point（/goal_pose 订阅） -->
             <NavToPose goal_pose=""
                        goal_pose_stamped="{clicked_point}"/>

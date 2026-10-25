@@ -80,7 +80,6 @@ void PidController::configure(
   min_linear_vel_ = require_param<double>(node_, plugin_name_ + ".min_linear_vel");
   lookahead_dist_ = require_param<double>(node_, plugin_name_ + ".lookahead_dist");
   goal_tolerance_ = require_param<double>(node_, plugin_name_ + ".goal_tolerance");
-  stop_ramp_dist_ = require_param<double>(node_, plugin_name_ + ".stop_ramp_dist");
   max_integral_ = require_param<double>(node_, plugin_name_ + ".max_integral");
 
   // 初始化PID状态
@@ -162,10 +161,10 @@ geometry_msgs::msg::TwistStamped PidController::computeVelocityCommands(
     double next_yaw = std::atan2(nxt.y - target_point.y, nxt.x - target_point.x);
     turn_ahead = std::fabs(normalizeAngle(next_yaw - desired_yaw));
   }
-  double speed_scale = 1.0 - 0.45 * std::min(turn_ahead / M_PI_2, 1.0);
+  double speed_scale = 1.0 - 0.65 * std::min(turn_ahead / M_PI_2, 1.0);
 
   // 4b) 航向偏差也参与减速（鲁棒性兜底）
-  speed_scale *= 1.0 - 0.25 * std::min(std::fabs(heading_error) / M_PI_2, 1.0);
+  speed_scale *= 1.0 - 0.35 * std::min(std::fabs(heading_error) / M_PI_2, 1.0);
 
   double linear = max_linear_vel_ * std::max(speed_scale, 0.0);
   linear = std::max(linear, min_linear_vel_);
@@ -182,9 +181,8 @@ geometry_msgs::msg::TwistStamped PidController::computeVelocityCommands(
     return cmd_vel;
   }
 
-  // 接近终点时按剩余距离线性降速，平滑停车不冲过目标；
-  // 停车斜坡在终点前 stop_ramp_dist 距离内生效（比预瞄距离短，尾段更快）
-  double stop_ramp = std::clamp(dist_to_goal / std::max(stop_ramp_dist_, 0.5), 0.0, 1.0);
+  // 接近终点时按剩余距离线性降速，平滑停车不冲过目标
+  double stop_ramp = std::clamp(dist_to_goal / std::max(lookahead_dist_, 0.5), 0.0, 1.0);
   linear = linear * stop_ramp;
   if (linear < 1e-3) {
     cmd_vel.twist.linear.x = 0.0;

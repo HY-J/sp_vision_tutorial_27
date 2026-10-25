@@ -47,7 +47,6 @@ private:
   double min_linear_vel_;
   double lookahead_dist_;
   double goal_tolerance_;
-  double stop_ramp_dist_;
 };
 }
 #endif

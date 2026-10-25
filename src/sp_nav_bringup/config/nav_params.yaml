@@ -37,12 +37,11 @@ controller_server:
       base_frame_id: "base_link"
       kp: 2.0
       ki: 0.02
-      kd: 0.4
-      max_linear_vel: 1.4
-      min_linear_vel: 0.10
-      lookahead_dist: 1.6
-      goal_tolerance: 0.08
-      stop_ramp_dist: 0.6
+      kd: 0.5
+      max_linear_vel: 0.8
+      min_linear_vel: 0.08
+      lookahead_dist: 1.2
+      goal_tolerance: 0.10
       max_integral: 0.3
 
 sp_decision:
