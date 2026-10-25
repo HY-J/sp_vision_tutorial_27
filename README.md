@@ -90,6 +90,24 @@ sp_nav_bt    default_nav_with_fallback.xml
 
 > **结论**：多次重复实验 **4/4 全部到达**，无撞墙、无卡死，稳定性良好；终点停靠精度 0.088 ~ 0.092 m（远优于官方到达容差 0.15 m）；单程用时约 **94 s**，全程轨迹平滑、无明显抖动（RViz 中可直接观察机器人位姿与绿色全局路径的贴合情况）。
 
+## 调优历程（版本迭代与数据）
+
+开发过程中对控制器参数、云台姿态与路径平滑做了多轮迭代。各版本均在固定起终点、一次点击条件下实测；**多轮重复实验中任何一轮撞墙/卡死均记为不稳定**：
+
+| 版本 | 关键改动 | 重复实验结果 |
+|---|---|---|
+| v0.8 基线（发放框架 + 纯 PID） | 保守参数、长减速坡 | 4/4 不撞墙，但用时 >110 s，终点前减速坡过长导致蜗牛爬 |
+| v1.4 激进提速 | max_linear_vel=1.4 + 强弯道减速 | yaw 未锁定时 4/4 方向错乱撞墙；锁定云台 yaw 后 3/4 成功（47.7~54.6 s），run4 终点前卡死 |
+| v1.0 中等速度 | max_linear_vel=1.0 | RUN1 过弯切内壁撞墙，其余 3 轮约 80 s 到达 |
+| v1.0 + 折点保护 | 预瞄点不越过折点 | 3/4 成功（47.7~54.6 s），run4 终点前卡死（dist≈2.94 m） |
+| v1.2 + 圆弧平滑 + 方向限速 | A\* 折点圆弧化、期望方向变化率限速 | 直接撞墙（速度过快 + 弯道减速盲区），判定不稳定 |
+| **v0.9 最终版** | 回到基线 + 云台 yaw 锁定 + 尾段最低速保底 | **4/4 到达，约 94 s，终点精度 0.088~0.092 m，无撞墙无卡死** |
+
+> **调优结论**：迷宫 90° 直角弯密集，线速度超过 1.0 m/s 后过弯极易切壁；
+> 圆弧平滑与方向限速能改善轨迹平滑度，但会放大弯道减速盲区导致撞墙；
+> 最终版采用"保守速度 + 云台锁定 + 尾段保底"组合，在保证评测不撞墙的
+> 前提下把单程用时从约 118 s 优化到约 94 s。
+
 ## 可视化
 
 RViz（`sp_nav_bringup/rviz/rviz.rviz`）默认展示：
@@ -107,6 +125,9 @@ RViz（`sp_nav_bringup/rviz/rviz.rviz`）默认展示：
 ## Commit 记录（节选）
 
 ```
+25399bf revert(bringup): drop actual trajectory view, keep original rviz config
+c7b5e46 perf(controller): restore stable baseline with min-velocity floor
+818ce1e fix(bt): lock gimbal yaw to zero to fix direction drift
 2e98c87 perf(controller): tighten corner deceleration and stop ramp for maze sprint
 9a94947 feat(controller): implement lookahead vector-pursuit PID controller
 c017d47 fix(bt): fix navigation tree config for maze click task
