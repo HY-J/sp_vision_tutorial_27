@@ -88,7 +88,7 @@ sp_nav_bt    default_nav_with_fallback.xml
 | RUN 3 | 到达 | ~94 | 0.088 | 无 |
 | RUN 4 | 到达（remaining=0.149, elapsed=94.13 s） | 94.13 | 0.091 | 无 |
 
-> **结论**：多次重复实验 **4/4 全部到达**，无撞墙、无卡死，稳定性良好；终点停靠精度 0.088 ~ 0.092 m（远优于官方到达容差 0.15 m）；单程用时约 **94 s**，全程轨迹平滑、无明显抖动（RViz 中可叠加 `ActualTrajectory` 显示查看实际行驶轨迹）。
+> **结论**：多次重复实验 **4/4 全部到达**，无撞墙、无卡死，稳定性良好；终点停靠精度 0.088 ~ 0.092 m（远优于官方到达容差 0.15 m）；单程用时约 **94 s**，全程轨迹平滑、无明显抖动（RViz 中可直接观察机器人位姿与绿色全局路径的贴合情况）。
 
 ## 可视化
 
@@ -97,8 +97,7 @@ RViz（`sp_nav_bringup/rviz/rviz.rviz`）默认展示：
 - **Map**：全局代价地图（`/global_costmap`）；
 - **Path**：A\* 全局路径（`/global_path`，绿色）；
 - **Marker**：规划与控制器可视化（`/plan_markers` 等）；
-- **TF**：机器人位姿（map / odom / base_link）；
-- **ActualTrajectory**：实际行驶轨迹（订阅 `/Odometry`，橙色累积轨迹）。
+- **TF**：机器人位姿（map / odom / base_link）。
 
 ## 加分项说明
 
