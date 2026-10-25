@@ -37,23 +37,23 @@ def generate_launch_description():
             output='screen',
             parameters=[params_file],
         ),
-        # 决策层（上层行为树）
-        #Node(
-         #   package='sp_decision',
-          #  executable='sp_decision_node',
-           # name='sp_decision',
-            #output='screen',
-            #parameters=[params_file],
-        #),
-        # 导航接口（下层行为树）
-        #Node(
-        #    package='sp_nav_bt',
-        #    executable='nav_interface_node',
-        #    name='nav_interface_node',
-        #    output='screen',
-        #    parameters=[params_file],
-        #),
-        # ✅ 新增：仿真器节点
+        # 决策层（上层行为树 click_nav.xml：接收 RViz 点击目标）
+        Node(
+            package='sp_decision',
+            executable='sp_decision_node',
+            name='sp_decision',
+            output='screen',
+            parameters=[params_file],
+        ),
+        # 导航接口（下层行为树 default_nav_with_fallback.xml：A* 规划 + 控制使能 + 状态跟踪）
+        Node(
+            package='sp_nav_bt',
+            executable='nav_interface_node',
+            name='nav_interface_node',
+            output='screen',
+            parameters=[params_file],
+        ),
+        # 仿真器
         Node(
             package='sp_nav_sim',
             executable='sim_robot',

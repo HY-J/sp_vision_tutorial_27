@@ -1,13 +1,13 @@
 planner_server:
   ros__parameters:
     costmap_topic: "/global_costmap"
-    local_costmap_topic: "/local_costmap/costmap"  # ✅ 和仿真器发布的局代价地图对齐
+    local_costmap_topic: "/local_costmap/costmap"  # ✅ 和仿真器发布的局部代价地图对齐
     path_topic: "/global_path"
     plugin_name: "AStar"
-    plugin_type: "sp_global_planner/AStarPlanner" # 改成XML里name字段的值
+    plugin_type: "sp_global_planner/AStarPlanner"  # XML 中 name 字段的值
     AStar:
-      lethal_cost: 254
-      cost_weight: 3.0
+      lethal_cost: 100
+      cost_weight: 5.0
 
 esdf_map_publisher:
   ros__parameters:
@@ -18,32 +18,31 @@ esdf_map_publisher:
     robot_radius: 0.25
     margin: 0.30
     d_safe: 0.70
-    w: 40.0
+    w: 15.0
     unknown_cost: 255
     visualize_esdf: false
 
 controller_server:
   ros__parameters:
     local_path_topic: "/global_path"
-    odom_topic: "/Odometry"                  # ✅ 仿真器发布的大写O
-    odom_frame_id: "lidar_odom"              # ✅ 仿真器的里程计坐标系
+    odom_topic: "/Odometry"                  # 仿真器发布的大写 O
+    odom_frame_id: "lidar_odom"              # 仿真器的里程计坐标系
     map_frame_id: "map"
-    cmd_vel_topic: "/sentry/cmd_vel"         # ✅ 仿真器订阅的速度话题
+    cmd_vel_topic: "/sentry/cmd_vel"         # 仿真器订阅的速度话题
     base_frame_id: "base_link"
     control_frequency: 50.0
     plugin_name: "PidController"
     plugin_type: "PidController"
     PidController:
       base_frame_id: "base_link"
-      kp: 1.8
-      ki: 0.01
-      kd: 0.8
-      max_linear_vel: 0.6
-      min_linear_vel: 0.15
-      lookahead_dist: 1.0    # 加大预瞄距离，提前预判转弯
+      kp: 2.0
+      ki: 0.02
+      kd: 0.5
+      max_linear_vel: 0.8
+      min_linear_vel: 0.08
+      lookahead_dist: 1.2
       goal_tolerance: 0.10
       max_integral: 0.3
-
 
 sp_decision:
   ros__parameters:

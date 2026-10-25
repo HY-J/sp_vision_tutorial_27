@@ -4,6 +4,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <cmath>
+#include <algorithm>
 #include <tf2/utils.h>
 
 namespace {
@@ -102,12 +103,14 @@ geometry_msgs::msg::TwistStamped PidController::computeVelocityCommands(
   cmd_vel.header.stamp = node_->now();
   cmd_vel.header.frame_id = base_frame_id_;
 
+  (void)velocity;  // 当前实现为位姿预瞄控制，不依赖当前速度反馈
+
   // 路径为空，直接返回零速
   if (global_plan_.poses.empty()) {
     return cmd_vel;
   }
 
-  // ========== 第一步：选取预瞄目标点 ==========
+  // ========== 第一步：选取预瞄目标点（纯追踪矢量方向） ==========
   size_t nearest_idx = findNearestIndex(pose);
   size_t target_idx = nearest_idx;
   double acc_dist = 0.0;
@@ -124,20 +127,23 @@ geometry_msgs::msg::TwistStamped PidController::computeVelocityCommands(
     acc_dist += seg_len;
     target_idx = i + 1;
   }
-  const auto & target_point = global_plan_.poses[target_idx].pose.position;
 
-  // ========== 第二步：计算航向误差 ==========
-  // 目标航向：从当前位置指向预瞄点的角度
-  double target_yaw = std::atan2(
-    target_point.y - pose.pose.position.y,
-    target_point.x - pose.pose.position.x
-  );
+  const auto & cur = pose.pose.position;
+  const auto & target_point = global_plan_.poses[target_idx].pose.position;
+  const auto & goal_point = global_plan_.poses.back().pose.position;
+
+  // ========== 第二步：期望运动方向（map 系） ==========
+  double dx = target_point.x - cur.x;
+  double dy = target_point.y - cur.y;
+  double desired_yaw = std::atan2(dy, dx);
+
   // 当前航向：从四元数提取yaw角
   double current_yaw = tf2::getYaw(pose.pose.orientation);
-  // 航向误差 = 目标航向 - 当前航向，归一化
-  double heading_error = normalizeAngle(target_yaw - current_yaw);
 
-  // ========== 第三步：PID计算角速度 ==========
+  // 航向误差 = 期望方向 - 当前航向，归一化
+  double heading_error = normalizeAngle(desired_yaw - current_yaw);
+
+  // ========== 第三步：航向PID（输出给角速度通道，供差速底盘使用） ==========
   integral_ += heading_error;
   // 积分限幅，防止饱和
   if (integral_ > max_integral_) integral_ = max_integral_;
@@ -147,27 +153,55 @@ geometry_msgs::msg::TwistStamped PidController::computeVelocityCommands(
   double angular_z = kp_ * heading_error + ki_ * integral_ + kd_ * derivative;
   prev_error_ = heading_error;
 
-  // ========== 第四步：自适应线速度（弯道减速） ==========
-  double error_abs = std::fabs(heading_error);
-  // 误差越大（转弯越急），速度越低
-  double speed_scale = 1.0 - std::min(error_abs / M_PI_2, 1.0);
-  double linear_x = max_linear_vel_ * speed_scale;
-  // 保证不低于最小速度
-  linear_x = std::max(linear_x, min_linear_vel_);
+  // ========== 第四步：自适应线速度 ==========
+  // 4a) 弯道减速：预瞄点之后的路径转角越大，速度越低
+  double turn_ahead = 0.0;
+  if (target_idx + 1 < global_plan_.poses.size()) {
+    const auto & nxt = global_plan_.poses[target_idx + 1].pose.position;
+    double next_yaw = std::atan2(nxt.y - target_point.y, nxt.x - target_point.x);
+    turn_ahead = std::fabs(normalizeAngle(next_yaw - desired_yaw));
+  }
+  double speed_scale = 1.0 - 0.65 * std::min(turn_ahead / M_PI_2, 1.0);
 
-  // ========== 第五步：终点判定停车 ==========
-  const auto & goal_point = global_plan_.poses.back().pose.position;
+  // 4b) 航向偏差也参与减速（鲁棒性兜底）
+  speed_scale *= 1.0 - 0.35 * std::min(std::fabs(heading_error) / M_PI_2, 1.0);
+
+  double linear = max_linear_vel_ * std::max(speed_scale, 0.0);
+  linear = std::max(linear, min_linear_vel_);
+
+  // ========== 第五步：终点判定与平滑停车 ==========
   double dist_to_goal = std::hypot(
-    goal_point.x - pose.pose.position.x,
-    goal_point.y - pose.pose.position.y
-  );
+    goal_point.x - cur.x, goal_point.y - cur.y);
+
   if (dist_to_goal < goal_tolerance_) {
-    linear_x = 0.0;
-    angular_z = 0.0;
+    // 已到达，停车
+    cmd_vel.twist.linear.x = 0.0;
+    cmd_vel.twist.linear.y = 0.0;
+    cmd_vel.twist.angular.z = 0.0;
+    return cmd_vel;
   }
 
-  // ========== 赋值输出 ==========
-  cmd_vel.twist.linear.x = linear_x;
+  // 接近终点时按剩余距离线性降速，平滑停车不冲过目标
+  double stop_ramp = std::clamp(dist_to_goal / std::max(lookahead_dist_, 0.5), 0.0, 1.0);
+  linear = linear * stop_ramp;
+  if (linear < 1e-3) {
+    cmd_vel.twist.linear.x = 0.0;
+    cmd_vel.twist.linear.y = 0.0;
+    cmd_vel.twist.angular.z = 0.0;
+    return cmd_vel;
+  }
+
+  // ========== 第六步：map 系期望速度 -> base_link 系线速度 ==========
+  // 说明：评测仿真器为全向底盘，只消费 cmd_vel 的 linear.x / linear.y
+  // （angular.z 不生效），因此把期望运动方向旋转到车体系输出，
+  // 使机器人具备横向纠偏能力，等效于“矢量追击 + 横向预瞄”。
+  double vx_map = std::cos(desired_yaw) * linear;
+  double vy_map = std::sin(desired_yaw) * linear;
+  double cos_yaw = std::cos(current_yaw);
+  double sin_yaw = std::sin(current_yaw);
+
+  cmd_vel.twist.linear.x = cos_yaw * vx_map + sin_yaw * vy_map;
+  cmd_vel.twist.linear.y = -sin_yaw * vx_map + cos_yaw * vy_map;
   cmd_vel.twist.angular.z = angular_z;
 
   return cmd_vel;
