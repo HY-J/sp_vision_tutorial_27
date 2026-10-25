@@ -14,9 +14,9 @@
 ```bash
 # 构建
 colcon build --packages-select sp_controller_server sp_nav_bringup sp_decision sp_global_planner sp_nav_bt robot_msg sp_map_server sp_nav_sim
-
+source install/setup.bash
 # 一键启动（仿真 + 规划 + 行为树 + 控制器 + RViz）
-./sim_nav_all_start.sh
+ros2 launch sp_nav_bringup sp_nav.launch.py
 
 # 在 RViz 中用 2D Goal Pose 点击迷宫右上角终点 (14.1, 14.1) 即可
 ```
