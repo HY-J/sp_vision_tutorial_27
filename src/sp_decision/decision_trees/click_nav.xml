@@ -11,12 +11,15 @@
       <Sequence>
         <ForceSuccess>
           <Sequence>
+            <!-- 先锁定底盘/云台：底盘跟随不自转、云台 yaw 锁定，否则仿真里
+                 云台默认全向扫描会让机器人边导航边自转，速度方向错乱撞墙 -->
+            <ChassisMode mode="1"
+                         is_stop="false"
+                         rotate_velocity="0.0"/>
+            <GimbalControl mode="2"/>
+            <!-- 目标点来自 BlackboardBridge 写入的 clicked_point（/goal_pose 订阅） -->
             <NavToPose goal_pose=""
                        goal_pose_stamped="{clicked_point}"/>
-            <ChassisMode mode="0"
-                         is_stop="false"
-                         rotate_velocity="3.0"/>
-            <GimbalControl mode="0"/>
           </Sequence>
         </ForceSuccess>
         <SetDouble key="nav_active" value="0.0"/>
@@ -46,7 +49,7 @@
       <input_port name="yaw_upper_limit" default="0.0" type="float">yaw 范围上限 deg，仅 mode=1 生效</input_port>
     </Action>
     <Action ID="SetDouble">
-      <input_port name="key" type="std::string">要写入的 blackboard key</input_port>
+      <input_port name="key" type="std::string">要写入的 blackboard 变量名</input_port>
       <input_port name="value" default="0.0" type="double">写入的浮点值</input_port>
     </Action>
     <Action ID="WaitDuration">

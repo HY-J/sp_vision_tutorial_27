@@ -12,7 +12,7 @@
       <nav_RateControl hz="10">
         <Fallback>
           <Sequence>
-            <nav_ComputePathService service_name="make_plan"
+            <nav_ComputePathService service_name="/planner_server/make_plan"
                                 start="{start_pose}"
                                 goal="{goal_pose}"
                                 path="{global_plan}"/>
@@ -26,7 +26,7 @@
                               bb_key="controller_enabled"/>
             <RetryUntilSuccessful num_attempts="100">
               <Delay delay_msec="100">
-                <nav_ComputePathService service_name="make_plan"
+                <nav_ComputePathService service_name="/planner_server/make_plan"
                                     start="{start_pose}"
                                     goal="{goal_pose}"
                                     path="{global_plan}"/>
@@ -39,7 +39,7 @@
         </Fallback>
       </nav_RateControl>
       <nav_NavStateTrack goal_pose="{goal_pose}"
-                     goal_tolerance="0.3"
+                     goal_tolerance="0.15"
                      remaining_distance="{remaining_distance}"
                      elapsed_time="{elapsed_time}"/>
     </nav_RepeatSequence>
